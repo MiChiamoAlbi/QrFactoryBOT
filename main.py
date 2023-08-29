@@ -8,23 +8,48 @@ from qrcode.image.styles.moduledrawers.pil import RoundedModuleDrawer, CircleMod
 from io import BytesIO
 from ast import literal_eval
 
-IMP, CHOSE, FB, ICON, BACK = range(5)
+IMP, CHOSE, FB, ICON, BACK, DIM, COR = range(7)
 
 async def start(update: Update, context: CallbackContext):
-    CallbackContext.user_data = [None,None,None,None] # 0-fill, 1-background, 2-url_image, 3-style
+    CallbackContext.user_data = [None,None,None,None,None,None] # 0-fill, 1-background, 2-url_image, 3-style, 4-correction, 5-dimension
     await update.message.reply_text("Hey welcome - you can send a message and I will reply with the qrcode\n\nWARNING: some style could potentially not be detected from all qrreader, so before publishing make sure that is working correctly")
 
 async def info(update: Update, context: CallbackContext):
-    await update.message.reply_text(text="This bot is created to make your qr codes colored and stylish as they should be. In the future will come more feture!\n\nYou can make a laugh for how bad I code or propose changes on my GitHub page <a href='https://github.com/MiChiamoAlbi'>MiChiamoAlbi</a>", parse_mode='HTML')
+    await update.message.reply_text(text="This bot is created to make your qr codes colored and stylish as they should be. In the future will come more feture!\n\nIf you want make a laugh how bad I code or you want to propose some changes, you can reach me on <a href='https://github.com/MiChiamoAlbi/QrFactoryBOT'>GitHub</a>", parse_mode='HTML')
 
 async def create_qr(update: Update, context: CallbackContext):
     img_io = BytesIO()
-    qr = qrcode.QRCode(
-        version=None,
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=10,
-        border=4,
-    )
+    try:
+        if CallbackContext.user_data[4] == 'L':
+            qr = qrcode.QRCode(
+                version=CallbackContext.user_data[5],
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+        elif CallbackContext.user_data[4] == 'H':
+            qr = qrcode.QRCode(
+                version=CallbackContext.user_data[5],
+                error_correction=qrcode.constants.ERROR_CORRECT_H,
+                box_size=10,
+                border=4,
+            )
+        else:
+            qr = qrcode.QRCode(
+                version=CallbackContext.user_data[5],
+                error_correction=qrcode.constants.ERROR_CORRECT_M,
+                box_size=10,
+                border=4,
+            )
+    except:
+            print('Qualcosa è andato storto')
+            qr = qrcode.QRCode(
+                version=None,
+                error_correction=qrcode.constants.ERROR_CORRECT_M,
+                box_size=10,
+                border=4,
+            )
+
     qr.add_data(update.message.text)
     qr.make(fit=True)
 
@@ -61,6 +86,7 @@ async def settings(update: Update, context: CallbackContext):
                     ],
                     [
                         InlineKeyboardButton("Style", callback_data="style"),
+                        InlineKeyboardButton("Dimension", callback_data="dimension"),
                     ],
                     [
                         InlineKeyboardButton("End", callback_data="end"),
@@ -78,6 +104,7 @@ async def back_settings(update: Update, context: CallbackContext):
                     ],
                     [
                         InlineKeyboardButton("Style", callback_data="style"),
+                        InlineKeyboardButton("Dimension", callback_data="dimension"),
                     ],
                     [
                         InlineKeyboardButton("End", callback_data="end"),
@@ -137,7 +164,7 @@ async def save(update: Update, context: CallbackContext):
     query = update.callback_query
     try:
         if not CallbackContext.user_data in globals():
-            CallbackContext.user_data = [None,None,None,None]
+            CallbackContext.user_data = [None,None,None,None,None,None]
     except:
         pass
     if query.data[:4]=='fill':
@@ -186,6 +213,50 @@ async def style(update: Update, context: CallbackContext):
     await query.edit_message_text('Select the style you prefer', reply_markup=reply_markup)
     return CHOSE
 
+async def correction(update: Update, context: CallbackContext):
+    query = update.callback_query
+    keyboard = [
+                    [
+                        InlineKeyboardButton("L", callback_data="L"),
+                        InlineKeyboardButton("M", callback_data="M"),
+                        InlineKeyboardButton("H", callback_data="H"),
+                    ],
+                ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.answer()
+    await query.edit_message_text("Select the error correction you want:\n-L About 7% or less errors can be corrected.\n-M About 15% or less errors can be corrected.\n-H About 30% or less errors can be corrected.", reply_markup=reply_markup)
+    return COR
+
+async def dimension(update: Update, context: CallbackContext):
+    try:
+        if not CallbackContext.user_data in globals():
+            CallbackContext.user_data = [None,None,None,None,None,None]
+    except:
+        pass
+    query = update.callback_query
+    CallbackContext.user_data[4] = query.data
+    await query.answer()
+    await query.edit_message_text('Insert a dimension between 1, the smallest, to 40, the biggest. You can put None as default')
+    return DIM
+
+async def dim_save(update: Update, context: CallbackContext):
+    reply_markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Menu", callback_data="menu")],
+        [InlineKeyboardButton("Exit", callback_data="end")]
+        ])
+    try:
+        if update.message.text==None or str(update.message.text).lower()=='none':
+            CallbackContext.user_data[5]=None
+            await update.message.reply_text('Okay!', reply_markup=reply_markup)
+        elif int(update.message.text)<41 or int(update.message.text)>0:
+            CallbackContext.user_data[5]=int(update.message.text)
+            await update.message.reply_text('Okay!', reply_markup=reply_markup)
+        else:
+            await update.message.reply_text('Something went wrong', reply_markup=reply_markup)
+    except:
+        await update.message.reply_text('Something went wrong', reply_markup=reply_markup)
+    return BACK
+
 async def end(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
@@ -195,9 +266,7 @@ async def end(update: Update, context: CallbackContext):
 def main(application):
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("info", info))
-    application.add_handler(MessageHandler(filters.TEXT & (~ filters.COMMAND), create_qr))
-    #application.add_handler(MessageHandler(filters.PHOTO & (~ filters.COMMAND), decode))
-    
+
     application.add_handler(
         ConversationHandler(
             entry_points=[CommandHandler("settings", settings)],
@@ -206,6 +275,7 @@ def main(application):
                     CallbackQueryHandler(front_back, pattern="^colour$"),
                     CallbackQueryHandler(icon, pattern="^icon$"),
                     CallbackQueryHandler(style, pattern="^style$"),
+                    CallbackQueryHandler(correction, pattern="^dimension$"),
                     CallbackQueryHandler(end, pattern="^end$"),
                 ],
                 FB: [
@@ -221,10 +291,19 @@ def main(application):
                     CallbackQueryHandler(back_settings, pattern="^menu$"),
                     CallbackQueryHandler(end, pattern="^end$"),
                 ],
+                COR:[
+                    CallbackQueryHandler(dimension, pattern="^L|M|H$"),
+                ],
+                DIM:[
+                    MessageHandler(filters.TEXT & (~ filters.COMMAND), dim_save),
+                ],
             },
             fallbacks=[CallbackQueryHandler(back_settings, pattern="^menu$")],
         )
     )
+
+    application.add_handler(MessageHandler(filters.TEXT & (~ filters.COMMAND), create_qr))
+    #application.add_handler(MessageHandler(filters.PHOTO & (~ filters.COMMAND), decode))
 
 if __name__ == "__main__":
     from credentials import TOKEN
